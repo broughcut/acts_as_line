@@ -7,6 +7,15 @@ Early days.
 Example
 =======
 
+table must already have a start_date and end_date column of type date or datetime.
+
+script/generate datesgeom_migration table_name
+
+ runs the following on target table:
+   execute("ALTER TABLE table_name ADD COLUMN geom geometry;")
+   execute("CREATE INDEX idx_table_name_dates_geom ON table_name USING GIST (geom);")
+
+
 object = Foo.find(:first)
 
 results = Foo.touching(object) | results = Foo.intersects(object,true)
