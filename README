@@ -26,4 +26,3 @@ results = Foo.touching(object,{:id => '>123'})
 results = Foo.touching(object,{:id => '<>123'}) etc
 results = Foo.touching(object,{:id => 123, :title => 'bar'})
 
-requires a geom field on acts_as_line model... migration to come.
