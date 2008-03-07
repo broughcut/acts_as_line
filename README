@@ -7,6 +7,14 @@ Early days.
 Example
 =======
 
+object = Foo.find(:first)
 
+results = Foo.touching(object) | results = Foo.intersects(object,true)
+results = Foo.asunder(object) | results = Foo.intersects(object,false)
 
-Copyright (c) 2008 Jamie Brough, released under the MIT license
+results = Foo.touching(object,{:id => 123})
+results = Foo.touching(object,{:id => '>123'})
+results = Foo.touching(object,{:id => '<>123'}) etc
+results = Foo.touching(object,{:id => 123, :title => 'bar'})
+
+requires a geom field on acts_as_line model... migration to come.
