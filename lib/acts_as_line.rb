@@ -39,7 +39,16 @@ module PutGIS
           find_by_sql sql.join(' ')
         end 
       end
-    end
+
+      def set_geom
+        ActiveRecord::Base.connection.execute("
+          UPDATE #{self.table_name} SET geom = setsrid(st_makeline(st_makepoint(0,extract(epoch from start_date)),st_makepoint(0,extract(epoch from end_date))),-1);")
+        ActiveRecord::Base.connection.execute("
+          CLUSTER idx_#{self.table_name}_dates_geom ON #{self.table_name};")
+        ActiveRecord::Base.connection.execute("
+          VACUUM ANALYZE #{self.table_name};")
+      end 
+    end 
 
     def draw_line
       self.geom = ActiveRecord::Base.connection.select_value("SELECT setsrid(st_makeline(st_makepoint(0,extract(epoch from DATE('#{self.start_date}'))),st_makepoint(0,extract(epoch from DATE('#{self.end_date}')))),-1) AS geom");
