@@ -1,3 +1,3 @@
 require 'acts_as_line'
 
-ActiveRecord::Base.send(:include, PutGIS::ActsAsLine)
+ActiveRecord::Base.send(:include, PutGIS::Acts::Line)

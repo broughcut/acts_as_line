@@ -3,6 +3,79 @@ ActsAsLine
 
 Early days.
 
+Things are progressing (and probably breaking in places). 
+Some big changes, and some very undry source....
+
+acts_as_line.rb has been rewritten to include instance methods.
+
+I am basically adding functions as I need them.
+
+> b = Foo.find(:first)
+
+Length of line in seconds:
+
+> b.duration 
+
+also
+
+> b.duration(:days)
+> b.duration(:weeks)
+
+Query against a part line, in this case the first half:
+
+> Foo.touching_segment(b,[0,0.5])
+
+­- where 0.5 is the midpoint of b's geom. A new line is created using the 
+   start/end points specified in the array.
+
+ Find records that do not intersect the latter two thirds of the line (and
+ have a bar_id of 5):
+
+> Foo.not_touching_segment(b,[0.3,1], :bar_id => 5)
+
+This needs to be able to support actual days/hours, rather than a proportion
+of a line -- which is not very robost if you are using it for bookings and
+such like.
+
+'asunder' method is now not_touching.
+
+> b = Booking.find(:first)
+
+> Booking.not_touching(b)
+
+Foo.asunder is now an alias for the class method, not_in_intersects
+which uses joins to speed up queries against a large dataset.
+
+class Property < ActiveRecord::Base
+  has_many :bookings
+  acts_as_line
+end
+
+class Booking < ActiveRecord::Base
+  belongs_to :property
+  acts_as_line
+end
+
+class Bookable < ActiveRecord::Base
+  acts_as_line
+end
+
+> week = Bookable.find(38)
+
+Find all *unbooked* properties for the booking period 'week' 
+without selecting each property:
+
+> Property.asunder(Booking,week)
+
+SQL:
+
+  SELECT (id) FROM properties WHERE properties.id 
+  NOT IN (SELECT DISTINCT on (properties.id) properties.id FROM bookings 
+  INNER JOIN properties ON properties.id=bookings.property_id
+  WHERE (ST_Intersects(bookings.geom,(SELECT geom FROM bookables 
+  WHERE id = 38)) = true))
+
+  [SQL (0.000791) -- small dataset as yet, but seems reasonable]
 
 Example
 =======
@@ -19,8 +92,7 @@ script/generate datesgeom_migration table_name
 object = Foo.find(:first)
 
 results = Foo.touching(object) | results = Foo.intersects(object,true)
-results = Foo.asunder(object) | results = Foo.intersects(object,false)
-
+results = Foo.not_touching(object) | results = Foo.intersects(object,false)
 results = Foo.touching(object,{:id => 123})
 results = Foo.touching(object,{:id => '>123'})
 results = Foo.touching(object,{:id => '<>123'}) etc
