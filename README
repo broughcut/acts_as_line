@@ -1,6 +1,24 @@
 ActsAsLine
 ==========
 
+Need to add tests as a priority, and must clean things up.
+
+In order to maintain consistency with postgis methods, intersects 
+is now simply intersects, the 'touching' alias has been removed.
+
+added:
+
+a.intersects?(b)
+a.covers?(b)
+a.covered_by?(b)
+
+Foo.within(b,:days,3,options={}) #also :secs, :hours
+Foo.covers(b,options={})
+Foo.covered_by(b,options={})
+
+covers: 'Geom A covers Geom B if no points of B lie in the exterior of A'
+
+
 Early days.
 
 Things are progressing (and probably breaking in places). 

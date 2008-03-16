@@ -1,4 +1,4 @@
-module PutGIS
+module PutsGIS
   module Acts
     module Line
 
@@ -9,8 +9,8 @@ module PutGIS
       module ClassMethods
         def acts_as_line
           before_validation :draw_line if self.column_names.include?("start_date")
-          include PutGIS::Acts::Line::InstanceMethods
-          extend PutGIS::Acts::Line::SingletonMethods
+          include PutsGIS::Acts::Line::InstanceMethods
+          extend PutsGIS::Acts::Line::SingletonMethods
         end
       end
 
@@ -19,27 +19,52 @@ module PutGIS
       end
  
       module SingletonMethods
-        def touching(object, options={})
-          intersects(object,'true',nil,options)
+        def intersects(object, options={})
+          gis_query(:ST_Intersects,object,true,nil,options)
         end
 
-        def touching_segment(object, segment, options={})
-          intersects(object,'true',segment,options)
+        def covers(object, options={})
+          gis_query(:ST_Covers,object,true,nil,options)
         end
 
-        def not_touching(object, options={})
-          intersects(object,'false',nil,options)
+        def covered_by(object, options={})
+          gis_query(:ST_CoveredBy,object,true,nil,options)
         end
 
-        def not_touching_segment(object, segment, options={})
-          intersects(object,'false',segment,options)
+        def within(object, kind, i, options={})
+          secs = secs(kind,i)
+          gis_query(:ST_DWithin,object,true,secs,options)
+        end
+
+        def secs(kind,i)
+          case kind
+          when :days
+            secs = (i*24)*(60**2)
+          when :hours
+            secs = (i*60)*60
+          when :secs
+            secs = i
+          end
+          secs
+        end
+
+        def intersects_segment(object, segment, options={})
+          gis_query(:ST_Intersects,object,true,segment,options)
+        end
+
+        def not_intersecting(object, options={})
+          gis_query(:ST_Intersects,object,false,nil,options)
+        end
+
+        def not_intersecting_segment(object, segment, options={})
+          gis_query(:ST_Intersects,object,false,segment,options)
         end
 
         def asunder(object0,object1,select=nil,options={})
           not_in_intersects(object0,object1,select,options)
         end
 
-        def intersects(object,boolean,p,options={})
+        def gis_query(function,object,boolean,p,options={})
           if object.class == Class
             object_table = object.table_name
           else
@@ -56,7 +81,12 @@ module PutGIS
           end
           sql = []
           sql << "SELECT * from #{table}"
-          sql << "WHERE (ST_Intersects(#{self.table_name}.geom,(#{select_geom})) = #{boolean})"
+          case function
+          when :ST_DWithin
+            sql << "WHERE (ST_DWithin(#{self.table_name}.geom,(#{select_geom}),#{p}) = #{boolean})"
+          else
+            sql << "WHERE (#{function.to_s}(#{self.table_name}.geom,(#{select_geom})) = #{boolean})"
+          end
           if options.size > 0
             options.each_pair do |key,value|
               if value.to_s.split('')[0] =~ /^>|^</
@@ -79,6 +109,7 @@ module PutGIS
           object0 = object0.table_name
           object = object1.class.table_name
           sql = []
+
           if select
             sql << "SELECT (#{select.to_s}) FROM #{table} WHERE #{table}.id NOT IN"
           else
@@ -87,7 +118,8 @@ module PutGIS
             sql << "(SELECT DISTINCT on (#{table}.id) #{table}.id FROM #{object0} 
                   INNER JOIN #{table} ON #{table}.id=#{object0}.#{self.to_s.downcase}_id
                   WHERE (ST_Intersects(#{object0}.geom,(SELECT geom FROM #{object} WHERE id = #{object1.id})) = true))"
-          if options.size > 0
+
+            if options.size > 0
             options.each_pair do |key,value|
              if value.to_s.split('')[0] =~ /^>|^</
                sql_value = value
@@ -123,29 +155,61 @@ module PutGIS
       module InstanceMethods
  
         def duration(time=:secs)
-          calc_duration(self,time)
+          gis_calc(:length,nil,time)
         end
 
-        def touching(object,options={})
-          intersects(object,'true',nil,options)
+        def distance(object,time=:secs)
+          gis_calc(:ST_Distance,object,time)
         end
 
-        def not_touching(object,options={})
-          intersects(object,'false',nil,options)
+        def intersects(object,options={})
+          gis_query(:ST_Intersects,object,true,nil,options)
         end
 
-        def touching_segment(object,segment,options={})
-          intersects(object,'true',segment,options)
+        def intersects?(object)
+          gis_query_tf(:ST_Intersects,object)
         end
 
-        def not_touching_segment(object,segment,options={})
-          intersects(object,'false',segment,options)
+        def covers(object,options={})
+          gis_query(:ST_Covers,object,true,nil,options)
         end
-        def calc_duration(object,time=:secs)
-          base_sum = "SELECT sum((length((SELECT geom FROM #{object.class.table_name} WHERE id = #{object.id})))/60)"
+
+        def covers?(object)
+          gis_query_tf(:ST_Covers,object)
+        end
+
+        def covered_by(object,options={})
+          gis_query(:ST_CoveredBy,object,true,nil,options)
+        end
+
+        def covered_by?(object)
+          gis_query_tf(:ST_CoveredBy,object)
+        end
+
+
+        def not_intersecitng(object,options={})
+          gis_query(:ST_Intersects,object,false,nil,options)
+        end
+
+        def intersecting_segment(object,segment,options={})
+          gis_query(:ST_Intersects,object,true,segment,options)
+        end
+
+        def not_intersecting_segment(object,segment,options={})
+          gis_query(:ST_Intersects,object,false,segment,options)
+        end
+
+        def gis_calc(function,object,time=:secs)
+          case function
+          when :length
+            base_sum = "SELECT sum((length((SELECT geom FROM #{self.class.table_name} WHERE id = #{self.id})))/60)"
+          when :ST_Distance
+            base_sum = "SELECT sum((ST_Distance((SELECT geom FROM #{self.class.table_name} WHERE id = #{self.id}),(SELECT geom FROM #{object.class.table_name} WHERE id = #{object.id})))/60)"
+          end
           case time.to_sym
           when :secs
-            sql = "SELECT length((SELECT geom FROM #{object.class.table_name} WHERE id = #{object.id}))"
+            sql = "SELECT length((SELECT geom FROM #{self.class.table_name} WHERE id = #{self.id}))" if function == :length
+            sql = "SELECT ST_Distance((SELECT geom FROM #{self.class.table_name} WHERE id = #{self.id}),(SELECT geom FROM #{object.class.table_name} WHERE id = #{object.id}))" if function == :ST_Distance
           when :minutes
             sql = base_sum
           when :hours
@@ -156,7 +220,7 @@ module PutGIS
           connection.select_value(sql).to_i
         end
 
-        def intersects(object,boolean,p,options={})
+        def gis_query(function,object,boolean,p,options={})
           if object.class == Class
             object_find = object
             object_table = object.table_name
@@ -174,7 +238,7 @@ module PutGIS
           end
           sql = []
           sql << "SELECT * from #{object_table}"
-          sql << "WHERE (ST_Intersects(#{object_table}.geom,(#{select_geom})) = #{boolean})"
+          sql << "WHERE (#{function.to_s}(#{object_table}.geom,(#{select_geom})) = #{boolean})"
           if options.size > 0
             options.each_pair do |key,value|
               if value.to_s.split('')[0] =~ /^>|^</
@@ -191,6 +255,20 @@ module PutGIS
           end
           object_find.find_by_sql sql.join(' ')
         end
+
+        def gis_query_tf(function,object)
+          first_geom = "SELECT geom FROM #{self.class.table_name} WHERE id = #{self.id}"
+          second_geom = "SELECT geom FROM #{object.class.table_name} WHERE id = #{object.id}" 
+          sql = "SELECT #{function.to_s}((#{first_geom}),(#{second_geom}))"
+          value = connection.select_value sql
+          case value
+          when "f"
+            false
+          when "t"
+            true
+          end
+        end
+ 
       end
 
     end
