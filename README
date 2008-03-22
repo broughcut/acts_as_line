@@ -99,6 +99,14 @@ SQL:
 
   [SQL (0.000791) -- small dataset as yet, but seems reasonable]
 
+  SELECT (id) FROM properties WHERE properties.id 
+  NOT IN (SELECT DISTINCT on (properties.id) properties.id FROM bookings 
+  INNER JOIN properties ON properties.id=bookings.property_id
+  WHERE (ST_Intersects(bookings.geom,(SELECT geom FROM bookables 
+  WHERE id = 38)) = true))
+
+
+
 Example
 =======
 
