@@ -1,6 +1,6 @@
 module PutsGIS
 
-  OPERATORS = [:intersects, :covers, :d_within, :covered_by]
+  OPERATORS = [:intersects, :covers, :dwithin, :covered_by]
 
   module Acts
 
@@ -37,11 +37,12 @@ module PutsGIS
           when :projection
             units = i
           end
+          units
         end
       end
 
       module ClassMethods
-        
+
         include Operations
 
         def acts_as_line
@@ -66,7 +67,7 @@ module PutsGIS
       end
 
       def draw_line
-        self.temporal_geom = ActiveRecord::Base.connection.select_value("SELECT setsrid(st_makeline(st_makepoint(0,extract(epoch from '#{self.start_date.xmlschema}'::timestamp)),st_makepoint(0,extract(epoch from '#{self.end_date.xmlschema}'::timestamp))),-1) AS geom") if self.start_date
+        self.temporal_geom = ActiveRecord::Base.connection.select_value("SELECT setsrid(st_makeline(st_makepoint(0,extract(epoch from TIMESTAMP WITH TIME ZONE '#{self.start_date.xmlschema}')),st_makepoint(0,extract(epoch from TIMESTAMP WITH TIME ZONE '#{self.end_date.xmlschema}'))),-1) AS geom") if self.start_date
       end
 
       def add_point
@@ -96,7 +97,6 @@ module PutsGIS
 
         OPERATORS.each do |method|
           define_method(method) do |*params|
-            p params.last
             if params.size > 1
               specified_options = params.last
             else
@@ -106,13 +106,14 @@ module PutsGIS
                                :units => :projection_units,
                                :segment => false,
                                :geom_col => :temporal_geom,
-                               :join => false,
-                               :id => false,
-                               :included => false,
+                               :geom => false,
+                               :fkey => :id,
+                               :in => true,
                                :select => :all,
                                :distance => false,
                                :drive => nil,
                                :destination => nil,
+                               :subquery => {},
                                :conditions => {}}
             options = default_options.merge specified_options
             specified_options.keys.each {|key|
@@ -121,6 +122,8 @@ module PutsGIS
             gis_query(method,params.first,options)
           end
         end
+
+
 
         def set_geom(kind)
 
@@ -142,25 +145,23 @@ module PutsGIS
           geom_kind = options[:geom_col].to_s
           function = "ST_#{function.to_s.camelize}"
           table = self.table_name
+          fkey = options[:fkey].to_s
+          subquery = options[:subquery]
           if options[:select] == :all
             select = "*"
           else
             select = "(#{options[:select].to_s.gsub(/:/){}})"
           end
-          if options[:join]
-            if options[:id].class == Fixnum
-              object_id = options[:id]
-            else 
-              object_id = options[:id].id
-            end
-            object_table = object.table_name
+          if options[:geom]
+            object_id = options[:geom].id
+            geom_b = options[:geom].class.table_name
           else
-            object_table = object.class.table_name
             object_id = object.id
           end
+          object_table = object.table_name
           sql = []
-          if options[:join]
-           if options[:included] == false
+          if options[:geom]
+           if options[:in] == false
               notin = 'NOT IN'
             else
               notin = 'IN'
@@ -168,18 +169,34 @@ module PutsGIS
             sql << "SELECT #{select} FROM #{table} WHERE" 
             if options[:conditions].any?
               options[:conditions].each_pair do |key,value|
-                if value.to_s.split('')[0] =~ /^>|^</
+                if value.class == Range
+                  sql << "(#{key} >= #{value.first} AND #{key} <= #{value.last}) AND"
+                elsif value.to_s.split('')[0] =~ /^>|^</
                   sql_value = value
                 else
                   sql_value = "= '#{value}'"
                 end
-                sql << "#{key} #{sql_value} AND"
+                sql << "#{key} #{sql_value} AND" unless value.class == Range
               end
             end
-            sql << "#{table}.id #{notin}"
-            sql << "(SELECT DISTINCT on (#{table}.id) #{table}.id FROM #{object_table} 
-                  INNER JOIN #{table} ON #{table}.id=#{object_table}.#{self.to_s.downcase}_id
-                  WHERE (#{function}(#{object_table}.#{geom_kind},(SELECT #{geom_kind} FROM #{options[:join].to_s} WHERE id = #{object_id})) = #{options[:outcome]}))"
+            sql << "#{table}.#{fkey} #{notin}"
+            sql << "(SELECT DISTINCT on (#{table}.#{fkey}) #{table}.#{fkey} FROM #{object_table} 
+                  INNER JOIN #{table} ON #{table}.#{fkey}=#{object_table}.#{self.to_s.downcase}_#{fkey}
+                  WHERE (#{function}(#{object_table}.#{geom_kind},(SELECT #{geom_kind} FROM #{geom_b} WHERE id = #{object_id})) = #{options[:outcome]}))"
+            if subquery.any?
+              function = "ST_#{subquery[:function].to_s.camelize}"
+              case subquery[:geom_kind]
+              when :geographic
+                geom_col = 'geom'
+              else
+                geom_col = 'temporal_geom'
+              end
+              geom = "#{subquery[:geom].class.table_name}"
+              id = "#{subquery[:geom].id}"
+              select = "SELECT #{geom_col} FROM #{geom} WHERE id = #{id}"
+              value = units(subquery[:value],subquery[:units])
+              sql << "AND (#{function}(#{table}.#{geom_col},(#{select}),#{value}))"
+            end
           else
             the_geom = "SELECT #{geom_kind} FROM #{object_table} WHERE id = #{object_id}"
             if options[:segment]
@@ -207,7 +224,7 @@ module PutsGIS
                     INNER JOIN #{table_name} ON #{table_name}.#{dest_id}=#{destination}.remote_id
                     WHERE #{destination}.#{within} <= #{value})"
           end
-          if options[:conditions].any? && options[:join] == false
+          if options[:conditions].any? && options[:geom] == false
             options[:conditions].each_pair do |key,value|
               if value.to_s.split('')[0] =~ /^>|^</
                 sql_value = value
@@ -217,7 +234,7 @@ module PutsGIS
               sql << "AND #{key} #{sql_value}"
             end
           end
-          if sql.size > 2 && options[:join] == false
+          if sql.size > 2 && options[:geom] == false
             sql[2] = sql[2].gsub(/AND/,'AND (')
             sql[-1] = sql[-1].gsub(/$/,')')
           end
@@ -241,8 +258,8 @@ module PutsGIS
           end
         end
 
-        def length(units=options[:units],options={})
-          options[:units] = units
+        def length(options={})
+          options[:units] ||= :projection
           options[:geom_col] = :temporal_geom
           gis_query_sum(:length,nil,options)
         end
