@@ -66,7 +66,7 @@ module PutsGIS
       end
 
       def draw_line
-        self.temporal_geom = ActiveRecord::Base.connection.select_value("SELECT setsrid(st_makeline(st_makepoint(0,extract(epoch from TIMESTAMP WITH TIME ZONE '#{self.start_date.xmlschema}')),st_makepoint(0,extract(epoch from TIMESTAMP WITH TIME ZONE '#{self.end_date.xmlschema}'))),-1) AS geom") if self.start_date
+        self.temporal_geom = ActiveRecord::Base.connection.select_value("SELECT setsrid(st_makeline(st_makepoint(0,extract(epoch from '#{self.start_date.xmlschema}'::timestamp)),st_makepoint(0,extract(epoch from '#{self.end_date.xmlschema}'::timestamp))),-1) AS geom") if self.start_date
       end
 
       def add_point
@@ -241,8 +241,8 @@ module PutsGIS
           end
         end
 
-        def length(options={})
-          options[:units] ||= :projection
+        def length(units=options[:units],options={})
+          options[:units] = units
           options[:geom_col] = :temporal_geom
           gis_query_sum(:length,nil,options)
         end
