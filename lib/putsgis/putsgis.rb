@@ -147,7 +147,11 @@ module PutsGIS
           table = self.table_name
           fkey = options[:fkey].to_s
           subquery = options[:subquery]
-          object_table = object.table_name
+          if object.class == Class
+            object_table = object.table_name
+          else
+            object_table = object.class.table_name
+          end
           if options[:select] == :all
             select = "*"
           else
