@@ -157,8 +157,8 @@ module PutsGIS
             geom_b = options[:geom].class.table_name
           else
             object_id = object.id
+            object_table = object.class.table_name
           end
-          object_table = object.table_name
           sql = []
           if options[:geom]
            if options[:in] == false
