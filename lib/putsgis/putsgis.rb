@@ -147,17 +147,17 @@ module PutsGIS
           table = self.table_name
           fkey = options[:fkey].to_s
           subquery = options[:subquery]
+          object_table = object.table_name
           if options[:select] == :all
             select = "*"
           else
             select = "(#{options[:select].to_s.gsub(/:/){}})"
           end
           if options[:geom]
-            object_id = options[:geom].id
+            geom_b_id = options[:geom].id
             geom_b = options[:geom].class.table_name
           else
             object_id = object.id
-            object_table = object.class.table_name
           end
           sql = []
           if options[:geom]
@@ -182,7 +182,7 @@ module PutsGIS
             sql << "#{table}.#{fkey} #{notin}"
             sql << "(SELECT DISTINCT on (#{table}.#{fkey}) #{table}.#{fkey} FROM #{object_table} 
                   INNER JOIN #{table} ON #{table}.#{fkey}=#{object_table}.#{self.to_s.downcase}_#{fkey}
-                  WHERE (#{function}(#{object_table}.#{geom_kind},(SELECT #{geom_kind} FROM #{geom_b} WHERE id = #{object_id})) = #{options[:outcome]}))"
+                  WHERE (#{function}(#{object_table}.#{geom_kind},(SELECT #{geom_kind} FROM #{geom_b} WHERE id = #{geom_b_id})) = #{options[:outcome]}))"
             if subquery.any?
               function = "ST_#{subquery[:function].to_s.camelize}"
               case subquery[:geom_kind]
