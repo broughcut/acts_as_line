@@ -1,6 +1,6 @@
 GEOPOST_ROOT = File.dirname(__FILE__)
-GEOCODED_ROOT = "/home/tempest/geocoded"
-DRIVETIME_ROOT = "/home/tempest/drivetime"
+GEOCODED_ROOT = "/home/nonstop/geocoded"
+DRIVETIME_ROOT = "/home/nonstop/drivetime"
 
 $LOAD_PATH << File.expand_path(File.dirname(__FILE__))
 

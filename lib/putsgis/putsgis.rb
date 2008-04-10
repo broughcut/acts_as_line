@@ -108,7 +108,9 @@ module PutsGIS
                                :geom_col => :temporal_geom,
                                :geom => false,
                                :fkey => :id,
+                               :join_conditions => {},
                                :in => true,
+                               :order => false,
                                :select => :all,
                                :distance => false,
                                :drive => nil,
@@ -186,7 +188,14 @@ module PutsGIS
             sql << "#{table}.#{fkey} #{notin}"
             sql << "(SELECT DISTINCT on (#{table}.#{fkey}) #{table}.#{fkey} FROM #{object_table} 
                   INNER JOIN #{table} ON #{table}.#{fkey}=#{object_table}.#{self.to_s.downcase}_#{fkey}
-                  WHERE (#{function}(#{object_table}.#{geom_kind},(SELECT #{geom_kind} FROM #{geom_b} WHERE id = #{geom_b_id})) = #{options[:outcome]}))"
+                  WHERE ((#{function}(#{object_table}.#{geom_kind},(SELECT #{geom_kind} FROM #{geom_b} WHERE id = #{geom_b_id})) = #{options[:outcome]})"
+              if options[:join_conditions].any?
+                options[:join_conditions].each_pair do |key,value|
+                  sql_value = value
+                  sql << "AND #{object_table}.#{key} #{sql_value}))"
+                end
+              end
+
             if subquery.any?
               function = "ST_#{subquery[:function].to_s.camelize}"
               case subquery[:geom_kind]
@@ -216,7 +225,7 @@ module PutsGIS
             if options[:distance]
               distance = ",#{units(options[:distance],options[:units])}"
             end
-            sql << "WHERE (#{function}(#{table_name}.#{geom_kind},(#{select_geom})#{distance}) = #{options[:outcome]})"
+              sql << "WHERE (#{function}(#{table_name}.#{geom_kind},(#{select_geom})#{distance}) = #{options[:outcome]})"
           end
           if options[:destination]
             destination = options[:destination].to_s.pluralize
@@ -232,6 +241,8 @@ module PutsGIS
             options[:conditions].each_pair do |key,value|
               if value.to_s.split('')[0] =~ /^>|^</
                 sql_value = value
+              elsif value == :not_null
+                sql_value = "IS NOT NULL"
               else
                 sql_value = "= '#{value}'"
               end
@@ -242,6 +253,7 @@ module PutsGIS
             sql[2] = sql[2].gsub(/AND/,'AND (')
             sql[-1] = sql[-1].gsub(/$/,')')
           end
+          sql << "ORDER BY RANDOM()" if options[:order] = :rand
           if options[:select] != :all
             connection.select_values sql.join(' ')
           else
